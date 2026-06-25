@@ -837,7 +837,7 @@
         let staffLookup = {};
         let staffMasterReady = false;
         let deferredFill = null;
-        const MASTER_LIST_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTO68GX9WFErMXR7GxUbaAybv0Vu-Cuia482ACsE8LDVOy_g_fAmvuEG7Y6WTSAII_PG521XZoBgBM_/pub?output=csv';
+        const MASTER_LIST_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTO68GX9WFErMXR7GxUbaAybv0Vu-Cuia482ACsE8LDVOy_g_fAmvuEG7Y6WTSAII_PG521XZoBgBM_/pub?output=csv&gid=0';
 
         function parseCSV(text) {
             const rows = []; let row = [], field = '', inQ = false;
@@ -894,7 +894,7 @@
                 const sidCol = headerRow.findIndex(c => c && c.trim() === 'Staff ID');
                 const idx = {
                     staffId: sidCol,
-                    name: findHeaderIndex(headerRow, 'Name') !== -1 ? findHeaderIndex(headerRow, 'Name') : findHeaderIndex(headerRow, 'Staff Name'),
+                    name: findHeaderIndex(headerRow, 'English Name') !== -1 ? findHeaderIndex(headerRow, 'English Name') : (findHeaderIndex(headerRow, 'Name') !== -1 ? findHeaderIndex(headerRow, 'Name') : findHeaderIndex(headerRow, 'Staff Name')),
                     nationality: findHeaderIndex(headerRow, 'Nationality'),
                     status: findHeaderIndex(headerRow, "Staff's Type") !== -1 ? findHeaderIndex(headerRow, "Staff's Type") : findHeaderIndex(headerRow, 'Status'),
                     start: findHeaderIndex(headerRow, 'DOJ') !== -1 ? findHeaderIndex(headerRow, 'DOJ') : findHeaderIndex(headerRow, 'Start Date'),
