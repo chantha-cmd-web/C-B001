@@ -410,6 +410,7 @@
                                     <span class="sync-dot" id="syncDot"></span>
                                     <span class="sync-text" id="syncText">Connecting</span>
                                 </div>
+                                <span id="master-list-status" style="font-size:0.75rem;color:var(--text-muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
                                 <div class="theme-toggle" onclick="toggleTheme()"><i class="fa-solid fa-moon" id="themeIcon"></i></div>
                                 <div class="user-profile">
                                     <div class="user-avatar"><i class="fa-solid fa-user"></i></div>
@@ -532,10 +533,6 @@
                                 <button class="btn btn-success" onclick="addNewRecord('res')"><i class="fa-solid fa-plus"></i> New Record</button>
                             </div>
                         </div>
-                        <div class="filter-dropdowns">
-                            <select id="filter-res-reason"><option value="">All Reasons</option><option value="Resign">Resign</option><option value="Terminate">Terminate</option><option value="Abandonment">Abandonment</option><option value="End of Contract">End of Contract</option></select>
-                            <select id="filter-res-clearance"><option value="">All Statuses (Clearance)</option><option value="Yes">Cleared</option><option value="No">Pending</option></select>
-                        </div>
                     </div>
                     <div class="panel">
                         <div class="table-responsive">
@@ -577,9 +574,6 @@
                                 <button class="btn btn-secondary" onclick="clearFilters('nssf')">Clear</button>
                                 <button class="btn btn-success" onclick="addNewRecord('nssf')"><i class="fa-solid fa-plus"></i> New Record</button>
                             </div>
-                        </div>
-                        <div class="filter-dropdowns">
-                            <select id="filter-nssf-month"><option value="">All Months</option><option value="January">January</option><option value="February">February</option><option value="March">March</option><option value="April">April</option><option value="May">May</option><option value="June">June</option><option value="July">July</option><option value="August">August</option><option value="September">September</option><option value="October">October</option><option value="November">November</option><option value="December">December</option></select>
                         </div>
                     </div>
                     <div class="panel">
@@ -629,9 +623,6 @@
                                 <button class="btn btn-secondary" onclick="clearFilters('don')">Clear</button>
                                 <button class="btn btn-success" onclick="addNewRecord('don')"><i class="fa-solid fa-plus"></i> New Record</button>
                             </div>
-                        </div>
-                        <div class="filter-dropdowns">
-                            <select id="filter-don-type"><option value="">All Types</option><option value="Wedding">Wedding</option><option value="Funeral">Funeral</option><option value="Maternity">Maternity</option><option value="Hospitalization">Hospitalization</option><option value="Other">Other</option></select>
                         </div>
                     </div>
                     <div class="panel">
@@ -862,6 +853,8 @@
 
         let staffMasterData = [];
         let staffLookup = {};
+        let staffMasterReady = false;
+        let deferredFill = null;
         const MASTER_LIST_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTO68GX9WFErMXR7GxUbaAybv0Vu-Cuia482ACsE8LDVOy_g_fAmvuEG7Y6WTSAII_PG521XZoBgBM_/pub?output=csv&gid=0';
 
         function parseCSV(text) {
@@ -901,12 +894,13 @@
         }
 
         async function fetchMasterList() {
+            document.getElementById('master-list-status').innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Loading staff data...';
             try {
                 const resp = await fetch(MASTER_LIST_URL);
                 const csv = await resp.text();
                 const allRows = parseCSV(csv);
                 const headerRow = allRows.find(r => r[1] && r[1].trim() === 'Staff ID');
-                if (!headerRow) { console.warn('Master List: header row not found'); return; }
+                if (!headerRow) { console.warn('Master List: header row not found'); staffMasterReady = true; document.getElementById('master-list-status').innerHTML = ''; return; }
                 const idx = { staffId:1, name:2, nationality: findHeaderIndex(headerRow, 'Nationality'), status: findHeaderIndex(headerRow, "Staff's Type"), start: findHeaderIndex(headerRow, 'DOJ'), campus: findHeaderIndex(headerRow, 'Campus'), position: findHeaderIndex(headerRow, 'Current Position'), department: findHeaderIndex(headerRow, 'Department'), lastDay: findHeaderIndex(headerRow, 'Last day of Employee') };
                 staffMasterData = []; staffLookup = {};
                 for (const r of allRows) {
@@ -916,7 +910,24 @@
                     staffMasterData.push(entry);
                     staffLookup[entry.staffId] = entry;
                 }
-            } catch (e) { console.error('Failed to fetch Master List:', e); }
+                staffMasterReady = true;
+                document.getElementById('master-list-status').innerHTML = '<i class="fa-solid fa-check-circle" style="color:var(--success)"></i> Staff data loaded (' + staffMasterData.length + ' records)';
+                setTimeout(() => { const el = document.getElementById('master-list-status'); if (el) el.innerHTML = ''; }, 6000);
+                if (deferredFill) {
+                    const fn = deferredFill.type === 'res' ? autoFillResignation : autoFillDonation;
+                    fn(deferredFill.staffId);
+                    deferredFill = null;
+                }
+                const resId = document.getElementById('res-id')?.value;
+                if (resId) autoFillResignation(resId);
+                const donId = document.getElementById('don-id')?.value;
+                if (donId) autoFillDonation(donId);
+            } catch (e) {
+                console.error('Failed to fetch Master List:', e);
+                staffMasterReady = true;
+                document.getElementById('master-list-status').innerHTML = '<i class="fa-solid fa-circle-exclamation" style="color:var(--danger)"></i> Failed to load staff data';
+                setTimeout(() => { const el = document.getElementById('master-list-status'); if (el) el.innerHTML = ''; }, 6000);
+            }
         }
 
         function parseDateDMY(str) {
@@ -930,8 +941,19 @@
         }
 
         function autoFillResignation(staffId) {
+            staffId = staffId.trim();
+            if (!staffId) return;
+            if (!staffMasterReady) {
+                deferredFill = { type: 'res', staffId: staffId };
+                document.getElementById('master-list-status').innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Loading staff data...';
+                return;
+            }
             const entry = staffLookup[staffId];
-            if (!entry) return;
+            if (!entry) {
+                document.getElementById('master-list-status').innerHTML = '<i class="fa-solid fa-circle-exclamation" style="color:var(--danger)"></i> Staff ID not found';
+                return;
+            }
+            document.getElementById('master-list-status').innerHTML = '<i class="fa-solid fa-check-circle" style="color:var(--success)"></i> Auto-filled from Master List';
             document.getElementById('res-name').value = entry.name;
             document.getElementById('res-nationality').value = entry.nationality;
             if (entry.campus) document.getElementById('res-campus').value = entry.campus;
@@ -945,8 +967,19 @@
         }
 
         function autoFillDonation(staffId) {
+            staffId = staffId.trim();
+            if (!staffId) return;
+            if (!staffMasterReady) {
+                deferredFill = { type: 'don', staffId: staffId };
+                document.getElementById('master-list-status').innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Loading staff data...';
+                return;
+            }
             const entry = staffLookup[staffId];
-            if (!entry) return;
+            if (!entry) {
+                document.getElementById('master-list-status').innerHTML = '<i class="fa-solid fa-circle-exclamation" style="color:var(--danger)"></i> Staff ID not found';
+                return;
+            }
+            document.getElementById('master-list-status').innerHTML = '<i class="fa-solid fa-check-circle" style="color:var(--success)"></i> Auto-filled from Master List';
             document.getElementById('don-name').value = entry.name;
             if (entry.campus) document.getElementById('don-campus').value = entry.campus;
             if (entry.status) document.getElementById('don-status').value = entry.status;
@@ -1098,22 +1131,22 @@
 
         function applyFilters(type) {
             if(type === 'res') {
-                currentFilters.res = { search: document.getElementById('filter-res-search').value.toLowerCase(), reason: document.getElementById('filter-res-reason').value, clearance: document.getElementById('filter-res-clearance').value };
+                currentFilters.res = { search: document.getElementById('filter-res-search').value.toLowerCase() };
                 renderResignations();
             } else if(type === 'nssf') {
-                currentFilters.nssf = { search: document.getElementById('filter-nssf-search').value.toLowerCase(), month: document.getElementById('filter-nssf-month').value };
+                currentFilters.nssf = { search: document.getElementById('filter-nssf-search').value.toLowerCase() };
                 renderNssf();
             } else if(type === 'don') {
-                currentFilters.don = { search: document.getElementById('filter-don-search').value.toLowerCase(), type: document.getElementById('filter-don-type').value };
+                currentFilters.don = { search: document.getElementById('filter-don-search').value.toLowerCase() };
                 renderDonations();
             }
         }
 
         function clearFilters(type) {
             currentFilters[type] = {};
-            if(type === 'res') { document.getElementById('filter-res-search').value='';document.getElementById('filter-res-reason').value='';document.getElementById('filter-res-clearance').value='';renderResignations(); }
-            else if(type === 'nssf') { document.getElementById('filter-nssf-search').value='';document.getElementById('filter-nssf-month').value='';renderNssf(); }
-            else if(type === 'don') { document.getElementById('filter-don-search').value='';document.getElementById('filter-don-type').value='';renderDonations(); }
+            if(type === 'res') { document.getElementById('filter-res-search').value=''; renderResignations(); }
+            else if(type === 'nssf') { document.getElementById('filter-nssf-search').value=''; renderNssf(); }
+            else if(type === 'don') { document.getElementById('filter-don-search').value=''; renderDonations(); }
         }
 
         async function handleResignationSubmit(e) {
