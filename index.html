@@ -471,7 +471,7 @@
                         <form id="resignation-form" onsubmit="handleResignationSubmit(event)">
                             <input type="hidden" id="res-edit-id">
                             <div class="form-grid">
-                                <div class="form-group"><label>Staff ID</label><input type="text" id="res-id" class="form-control" required></div>
+                                <div class="form-group"><label>Staff ID</label><input type="text" id="res-id" class="form-control" required oninput="autoFillResignation(this.value)" placeholder="Type ID to auto-fill"></div>
                                 <div class="form-group"><label>Staff Name</label><input type="text" id="res-name" class="form-control" required></div>
                                 <div class="form-group"><label>Position</label><input type="text" id="res-position" class="form-control" required></div>
                                 <div class="form-group"><label>Nationality</label><input type="text" id="res-nationality" class="form-control" required placeholder="e.g., Cambodian"></div>
@@ -533,8 +533,6 @@
                             </div>
                         </div>
                         <div class="filter-dropdowns">
-                            <select id="filter-res-campus"><option value="">All Campuses</option><option value="BCH">BCH</option><option value="BKK">BKK</option><option value="BTB1">BTB1</option><option value="BTB2">BTB2</option><option value="BTB3">BTB3</option><option value="CAR">CAR</option><option value="CEN">CEN</option><option value="CKD1">CKD1</option><option value="CKD2">CKD2</option><option value="DNG">DNG</option><option value="SHV">SHV</option><option value="SSK">SSK</option><option value="SOW">SOW</option><option value="STD">STD</option><option value="TSK">TSK</option><option value="VSB">VSB</option></select>
-                            <select id="filter-res-dept"><option value="">All Departments</option><option value="Academic">Academic</option><option value="Academics">Academics</option><option value="Operations">Operations</option><option value="Finance">Finance</option></select>
                             <select id="filter-res-reason"><option value="">All Reasons</option><option value="Resign">Resign</option><option value="Terminate">Terminate</option><option value="Abandonment">Abandonment</option><option value="End of Contract">End of Contract</option></select>
                             <select id="filter-res-clearance"><option value="">All Statuses (Clearance)</option><option value="Yes">Cleared</option><option value="No">Pending</option></select>
                         </div>
@@ -604,7 +602,7 @@
                         <form id="donation-form" onsubmit="handleDonationSubmit(event)">
                             <input type="hidden" id="don-edit-id">
                             <div class="form-grid">
-                                <div class="form-group"><label>Staff ID</label><input type="text" id="don-id" class="form-control" required></div>
+                                <div class="form-group"><label>Staff ID</label><input type="text" id="don-id" class="form-control" required oninput="autoFillDonation(this.value)" placeholder="Type ID to auto-fill"></div>
                                 <div class="form-group"><label>Staff Name</label><input type="text" id="don-name" class="form-control" required></div>
                                 <div class="form-group"><label>Campus</label><select id="don-campus" class="form-control" required><option value="" disabled selected>Select Campus</option><option value="BCH">BCH</option><option value="BKK">BKK</option><option value="BTB1">BTB1</option><option value="BTB2">BTB2</option><option value="BTB3">BTB3</option><option value="CAR">CAR</option><option value="CEN">CEN</option><option value="CKD1">CKD1</option><option value="CKD2">CKD2</option><option value="DNG">DNG</option><option value="SHV">SHV</option><option value="SSK">SSK</option><option value="SOW">SOW</option><option value="STD">STD</option><option value="TSK">TSK</option><option value="VSB">VSB</option></select></div>
                                 <div class="form-group"><label>Status</label><select id="don-status" class="form-control" required><option value="Full-time">Full-time</option><option value="Part-time">Part-time</option><option value="Semi-full-time">Semi-full-time</option><option value="Temporary">Temporary</option></select></div>
@@ -633,7 +631,6 @@
                             </div>
                         </div>
                         <div class="filter-dropdowns">
-                            <select id="filter-don-campus"><option value="">All Campuses</option><option value="BCH">BCH</option><option value="BKK">BKK</option><option value="BTB1">BTB1</option><option value="BTB2">BTB2</option><option value="BTB3">BTB3</option><option value="CAR">CAR</option><option value="CEN">CEN</option><option value="CKD1">CKD1</option><option value="CKD2">CKD2</option><option value="DNG">DNG</option><option value="SHV">SHV</option><option value="SSK">SSK</option><option value="SOW">SOW</option><option value="STD">STD</option><option value="TSK">TSK</option><option value="VSB">VSB</option></select>
                             <select id="filter-don-type"><option value="">All Types</option><option value="Wedding">Wedding</option><option value="Funeral">Funeral</option><option value="Maternity">Maternity</option><option value="Hospitalization">Hospitalization</option><option value="Other">Other</option></select>
                         </div>
                     </div>
@@ -863,6 +860,77 @@
             }
         }
 
+        let staffMasterData = [];
+        let staffLookup = {};
+        const MASTER_LIST_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTO68GX9WFErMXR7GxUbaAybv0Vu-Cuia482ACsE8LDVOy_g_fAmvuEG7Y6WTSAII_PG521XZoBgBM_/pub?output=csv&gid=0';
+        const HEADER_MAP = { staffId:1, name:2, nationality:5, status:8, start:10, campus:12, position:13, department:14, lastDay: null };
+
+        function parseCSV(text) {
+            const rows = [], re = /(?!\s*$)\s*(?:"([^"]*(?:""[^"]*)*)"|([^,"\s]*))\s*(?:,|$)/g;
+            let row = [], col = 0, m;
+            while (m = re.exec(text)) {
+                row[col] = m[1] !== undefined ? m[1].replace(/""/g, '"') : m[2];
+                col++;
+                if (text[m.index + m[0].length] !== ',') { rows.push(row); row = []; col = 0; }
+            }
+            if (row.length) rows.push(row);
+            return rows;
+        }
+
+        function findHeaderIndex(headers, name) {
+            for (let i = 0; i < headers.length; i++) {
+                if (headers[i] && headers[i].trim().toLowerCase() === name.toLowerCase()) return i;
+            }
+            return -1;
+        }
+
+        async function fetchMasterList() {
+            try {
+                const resp = await fetch(MASTER_LIST_URL);
+                const csv = await resp.text();
+                const rows = parseCSV(csv);
+                const headerRow = rows.find(r => r[1] && r[1].trim() === 'Staff ID');
+                if (!headerRow) return;
+                const idx = { staffId:1, name:2, nationality: findHeaderIndex(headerRow, 'Nationality'), status: findHeaderIndex(headerRow, "Staff's Type"), start: findHeaderIndex(headerRow, 'DOJ'), campus: findHeaderIndex(headerRow, 'Campus'), position: findHeaderIndex(headerRow, 'Current Position'), department: findHeaderIndex(headerRow, 'Department'), lastDay: findHeaderIndex(headerRow, 'Last day of Employee') };
+                staffMasterData = [];
+                staffLookup = {};
+                for (const row of rows) {
+                    const sid = row[idx.staffId];
+                    if (!sid || sid === 'Staff ID' || sid.trim() === '') continue;
+                    const entry = { staffId: sid.trim(), name: row[idx.name]||'', nationality: row[idx.nationality]||'', status: row[idx.status]||'', start: row[idx.start]||'', campus: row[idx.campus]||'', position: row[idx.position]||'', department: row[idx.department]||'', lastDay: row[idx.lastDay]||'' };
+                    staffMasterData.push(entry);
+                    staffLookup[entry.staffId] = entry;
+                }
+            } catch (e) { console.error('Failed to fetch Master List:', e); }
+        }
+
+        function autoFillResignation(staffId) {
+            const entry = staffLookup[staffId];
+            if (!entry) return;
+            document.getElementById('res-name').value = entry.name;
+            document.getElementById('res-nationality').value = entry.nationality;
+            document.getElementById('res-campus').value = entry.campus;
+            document.getElementById('res-department').value = entry.department;
+            document.getElementById('res-position').value = entry.position;
+            document.getElementById('res-status').value = entry.status;
+            if (entry.start) {
+                const d = new Date(entry.start);
+                if (!isNaN(d)) document.getElementById('res-start').value = d.toISOString().split('T')[0];
+            }
+            if (entry.lastDay) {
+                const d = new Date(entry.lastDay);
+                if (!isNaN(d)) document.getElementById('res-end').value = d.toISOString().split('T')[0];
+            }
+        }
+
+        function autoFillDonation(staffId) {
+            const entry = staffLookup[staffId];
+            if (!entry) return;
+            document.getElementById('don-name').value = entry.name;
+            document.getElementById('don-campus').value = entry.campus;
+            document.getElementById('don-status').value = entry.status;
+        }
+
         function initFirestore() {
             db.resignations = []; db.nssf = []; db.donations = []; db.users = []; db.config = {};
             setupFirestoreListener('resignations', 'resignations');
@@ -870,6 +938,8 @@
             setupFirestoreListener('donations', 'donations');
             setupFirestoreListener('users', 'users');
             setupFirestoreListener('config', 'config');
+            fetchMasterList();
+            setTimeout(() => fetchMasterList(), 300000);
         }
 
         function checkAuth() {
@@ -1007,22 +1077,22 @@
 
         function applyFilters(type) {
             if(type === 'res') {
-                currentFilters.res = { search: document.getElementById('filter-res-search').value.toLowerCase(), campus: document.getElementById('filter-res-campus').value, dept: document.getElementById('filter-res-dept').value, reason: document.getElementById('filter-res-reason').value, clearance: document.getElementById('filter-res-clearance').value };
+                currentFilters.res = { search: document.getElementById('filter-res-search').value.toLowerCase(), reason: document.getElementById('filter-res-reason').value, clearance: document.getElementById('filter-res-clearance').value };
                 renderResignations();
             } else if(type === 'nssf') {
                 currentFilters.nssf = { search: document.getElementById('filter-nssf-search').value.toLowerCase(), month: document.getElementById('filter-nssf-month').value };
                 renderNssf();
             } else if(type === 'don') {
-                currentFilters.don = { search: document.getElementById('filter-don-search').value.toLowerCase(), campus: document.getElementById('filter-don-campus').value, type: document.getElementById('filter-don-type').value };
+                currentFilters.don = { search: document.getElementById('filter-don-search').value.toLowerCase(), type: document.getElementById('filter-don-type').value };
                 renderDonations();
             }
         }
 
         function clearFilters(type) {
             currentFilters[type] = {};
-            if(type === 'res') { document.getElementById('filter-res-search').value='';document.getElementById('filter-res-campus').value='';document.getElementById('filter-res-dept').value='';document.getElementById('filter-res-reason').value='';document.getElementById('filter-res-clearance').value='';renderResignations(); }
+            if(type === 'res') { document.getElementById('filter-res-search').value='';document.getElementById('filter-res-reason').value='';document.getElementById('filter-res-clearance').value='';renderResignations(); }
             else if(type === 'nssf') { document.getElementById('filter-nssf-search').value='';document.getElementById('filter-nssf-month').value='';renderNssf(); }
-            else if(type === 'don') { document.getElementById('filter-don-search').value='';document.getElementById('filter-don-campus').value='';document.getElementById('filter-don-type').value='';renderDonations(); }
+            else if(type === 'don') { document.getElementById('filter-don-search').value='';document.getElementById('filter-don-type').value='';renderDonations(); }
         }
 
         async function handleResignationSubmit(e) {
@@ -1046,9 +1116,7 @@
         function renderResignations() {
             let data = db.resignations;
             const f = currentFilters.res;
-            if(f.search) data = data.filter(r => r.staffId.toLowerCase().includes(f.search)||r.name.toLowerCase().includes(f.search)||r.position.toLowerCase().includes(f.search));
-            if(f.campus) data = data.filter(r => r.campus === f.campus);
-            if(f.dept) data = data.filter(r => r.department === f.dept);
+            if(f.search) data = data.filter(r => r.staffId?.toLowerCase().includes(f.search)||r.name?.toLowerCase().includes(f.search)||r.position?.toLowerCase().includes(f.search));
             if(f.reason) data = data.filter(r => r.reason === f.reason);
             if(f.clearance) data = data.filter(r => r.clearance === f.clearance);
             document.getElementById('resignation-table-body').innerHTML = data.map(r => `<tr><td><strong>${r.staffId}</strong></td><td>${r.name}</td><td>${r.position}</td><td><span class="badge badge-cyan">${r.campus||'-'}</span></td><td>${r.department||'-'}</td><td>${r.nationality||'-'}</td><td>${r.status||'-'}</td><td>${r.reason||'-'}</td><td>${r.end}</td><td><span class="badge ${r.clearance==='Yes'?'badge-success':'badge-warning'}">${r.clearance==='Yes'?'Cleared':'Pending'}</span></td><td>${r.fileData?`<i class="fa-solid fa-file-pdf" style="color:var(--danger);font-size:1.2rem;"></i>`:'-'}</td><td><div class="action-btns"><button class="btn btn-primary btn-sm" onclick="editRecord('resignations','${r.id}','res')"><i class="fa-solid fa-pen-to-square"></i></button><button class="btn btn-gray btn-sm" onclick="openPdfViewer('resignations','${r.id}')"><i class="fa-solid fa-eye"></i></button><button class="btn btn-danger btn-sm" onclick="deleteRecord('resignations','${r.id}')"><i class="fa-solid fa-trash"></i></button></div></td></tr>`).join('')||'<tr><td colspan="12" style="text-align:center;padding:20px;">No records found.</td></tr>';
@@ -1102,8 +1170,7 @@
         function renderDonations() {
             let data = db.donations;
             const f = currentFilters.don;
-            if(f.search) data = data.filter(r => r.staffId.toLowerCase().includes(f.search)||r.name.toLowerCase().includes(f.search));
-            if(f.campus) data = data.filter(r => r.campus === f.campus);
+            if(f.search) data = data.filter(r => r.staffId?.toLowerCase().includes(f.search)||r.name?.toLowerCase().includes(f.search));
             if(f.type) data = data.filter(r => r.type === f.type);
             document.getElementById('donation-table-body').innerHTML = data.map(d => `<tr><td><strong>${d.staffId}</strong></td><td>${d.name}</td><td><span class="badge badge-cyan">${d.campus||'-'}</span></td><td><span class="badge badge-gray">${d.type}</span></td><td style="color:var(--success);font-weight:bold;">$${parseFloat(d.amount).toFixed(2)}</td><td>${d.date}</td><td>${d.fileData?`<i class="fa-solid fa-file-pdf" style="color:var(--danger);font-size:1.2rem;"></i>`:'-'}</td><td><div class="action-btns"><button class="btn btn-primary btn-sm" onclick="editRecord('donations','${d.id}','don')"><i class="fa-solid fa-pen-to-square"></i></button><button class="btn btn-gray btn-sm" onclick="openPdfViewer('donations','${d.id}')"><i class="fa-solid fa-eye"></i></button><button class="btn btn-danger btn-sm" onclick="deleteRecord('donations','${d.id}')"><i class="fa-solid fa-trash"></i></button></div></td></tr>`).join('')||'<tr><td colspan="8" style="text-align:center;padding:20px;">No records found.</td></tr>';
         }
