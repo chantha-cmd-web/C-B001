@@ -580,8 +580,8 @@
                             <div class="form-grid">
                                 <div class="form-group"><label>Staff ID</label><input type="text" id="don-id" class="form-control" required oninput="autoFillDonation(this.value)" onblur="autoFillDonation(this.value)" placeholder="Type ID to auto-fill"></div>
                                 <div class="form-group"><label>Staff Name</label><input type="text" id="don-name" class="form-control" required></div>
-                                <div class="form-group"><label>Campus</label><select id="don-campus" class="form-control" required><option value="" disabled selected>Select Campus</option><option value="BCH">BCH</option><option value="BKK">BKK</option><option value="BTB1">BTB1</option><option value="BTB2">BTB2</option><option value="BTB3">BTB3</option><option value="CAR">CAR</option><option value="CEN">CEN</option><option value="CKD1">CKD1</option><option value="CKD2">CKD2</option><option value="DNG">DNG</option><option value="SHV">SHV</option><option value="SSK">SSK</option><option value="SOW">SOW</option><option value="STD">STD</option><option value="TSK">TSK</option><option value="VSB">VSB</option></select></div>
-                                <div class="form-group"><label>Status</label><select id="don-status" class="form-control" required><option value="Full-time">Full-time</option><option value="Part-time">Part-time</option><option value="Semi-full-time">Semi-full-time</option><option value="Temporary">Temporary</option></select></div>
+                                <input type="hidden" id="don-campus">
+                                <input type="hidden" id="don-status">
                                 <div class="form-group"><label>Donation Type</label><select id="don-type" class="form-control" required><option value="Wedding">Wedding</option><option value="Funeral">Funeral</option><option value="Maternity">Maternity</option><option value="Hospitalization">Hospitalization</option><option value="Other">Other</option></select></div>
                                 <div class="form-group"><label>Amount (USD)</label><input type="number" step="0.01" id="don-amount" class="form-control" required></div>
                                 <div class="form-group"><label>Date</label><input type="date" id="don-date" class="form-control" required></div>
@@ -881,14 +881,44 @@
                 const resp = await fetch(MASTER_LIST_URL);
                 const csv = await resp.text();
                 const allRows = parseCSV(csv);
-                const headerRow = allRows.find(r => r[1] && r[1].trim() === 'Staff ID');
+                let headerRow = null, headerRowIndex = -1;
+                for (let i = 0; i < allRows.length; i++) {
+                    const r = allRows[i];
+                    if (r.some(c => c && c.trim() === 'Staff ID')) {
+                        headerRow = r;
+                        headerRowIndex = i;
+                        break;
+                    }
+                }
                 if (!headerRow) { console.warn('Master List: header row not found'); staffMasterReady = true; document.getElementById('master-list-status').innerHTML = ''; return; }
-                const idx = { staffId:1, name:2, nationality: findHeaderIndex(headerRow, 'Nationality'), status: findHeaderIndex(headerRow, "Staff's Type"), start: findHeaderIndex(headerRow, 'DOJ'), campus: findHeaderIndex(headerRow, 'Campus'), position: findHeaderIndex(headerRow, 'Current Position'), department: findHeaderIndex(headerRow, 'Department'), lastDay: findHeaderIndex(headerRow, 'Last day of Employee') };
+                const sidCol = headerRow.findIndex(c => c && c.trim() === 'Staff ID');
+                const idx = {
+                    staffId: sidCol,
+                    name: findHeaderIndex(headerRow, 'Name') !== -1 ? findHeaderIndex(headerRow, 'Name') : findHeaderIndex(headerRow, 'Staff Name'),
+                    nationality: findHeaderIndex(headerRow, 'Nationality'),
+                    status: findHeaderIndex(headerRow, "Staff's Type") !== -1 ? findHeaderIndex(headerRow, "Staff's Type") : findHeaderIndex(headerRow, 'Status'),
+                    start: findHeaderIndex(headerRow, 'DOJ') !== -1 ? findHeaderIndex(headerRow, 'DOJ') : findHeaderIndex(headerRow, 'Start Date'),
+                    campus: findHeaderIndex(headerRow, 'Campus'),
+                    position: findHeaderIndex(headerRow, 'Current Position') !== -1 ? findHeaderIndex(headerRow, 'Current Position') : findHeaderIndex(headerRow, 'Position'),
+                    department: findHeaderIndex(headerRow, 'Department'),
+                    lastDay: findHeaderIndex(headerRow, 'Last day of Employee') !== -1 ? findHeaderIndex(headerRow, 'Last day of Employee') : findHeaderIndex(headerRow, 'Last Working Day')
+                };
                 staffMasterData = []; staffLookup = {};
-                for (const r of allRows) {
+                for (let i = headerRowIndex + 1; i < allRows.length; i++) {
+                    const r = allRows[i];
                     const sid = r[idx.staffId];
-                    if (!sid || sid === 'Staff ID' || sid.trim() === '') continue;
-                    const entry = { staffId: sid.trim(), name: r[idx.name]||'', nationality: r[idx.nationality]||'', status: normalizeStatus(r[idx.status]||''), start: r[idx.start]||'', campus: r[idx.campus]||'', position: r[idx.position]||'', department: r[idx.department]||'', lastDay: r[idx.lastDay]||'' };
+                    if (!sid || sid.trim() === '') continue;
+                    const entry = {
+                        staffId: sid.trim(),
+                        name: idx.name !== -1 ? (r[idx.name]||'') : '',
+                        nationality: idx.nationality !== -1 ? (r[idx.nationality]||'') : '',
+                        status: idx.status !== -1 ? normalizeStatus(r[idx.status]||'') : '',
+                        start: idx.start !== -1 ? (r[idx.start]||'') : '',
+                        campus: idx.campus !== -1 ? (r[idx.campus]||'') : '',
+                        position: idx.position !== -1 ? (r[idx.position]||'') : '',
+                        department: idx.department !== -1 ? (r[idx.department]||'') : '',
+                        lastDay: idx.lastDay !== -1 ? (r[idx.lastDay]||'') : ''
+                    };
                     staffMasterData.push(entry);
                     staffLookup[entry.staffId] = entry;
                 }
