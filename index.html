@@ -181,6 +181,14 @@
         .topbar-right { display:flex;align-items:center;gap:16px }
         .theme-toggle { width:44px;height:44px;background:var(--input-bg);border:1px solid var(--glass-border);border-radius:14px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:var(--transition);color:var(--text-secondary);font-size:1rem }
         .theme-toggle:hover { background:var(--glass-bg);border-color:var(--accent-primary);color:var(--accent-primary);transform:rotate(20deg) }
+        .sync-indicator { display:flex;align-items:center;gap:7px;padding:6px 14px;border-radius:20px;background:var(--input-bg);border:1px solid var(--glass-border);font-size:0.75rem;font-weight:500;transition:var(--transition) }
+        .sync-dot { width:8px;height:8px;border-radius:50%;display:inline-block;transition:background var(--transition) }
+        .sync-dot.connected { background:#2ecc71;box-shadow:0 0 6px rgba(46,204,113,0.5) }
+        .sync-dot.connecting { background:#f39c12;box-shadow:0 0 6px rgba(243,156,18,0.5);animation:pulse 1.2s ease-in-out infinite }
+        .sync-dot.disconnected { background:#e74c3c;box-shadow:0 0 6px rgba(231,76,60,0.5) }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+        .sync-text { color:var(--text-muted);transition:color var(--transition) }
+        @media (max-width:768px) { .sync-indicator { display:none } }
         .user-profile { display:flex;align-items:center;gap:12px }
         .user-avatar { width:40px;height:40px;background:linear-gradient(135deg,var(--accent-primary)0%,var(--accent-secondary)100%);border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;color:white;box-shadow:0 4px 15px rgba(0,83,122,0.15) }
         .user-info { display:flex;flex-direction:column }
@@ -398,6 +406,10 @@
                                 </div>
                             </div>
                             <div class="topbar-right">
+                                <div id="sync-indicator" class="sync-indicator" title="Firestore Connection">
+                                    <span class="sync-dot" id="syncDot"></span>
+                                    <span class="sync-text" id="syncText">Connecting</span>
+                                </div>
                                 <div class="theme-toggle" onclick="toggleTheme()"><i class="fa-solid fa-moon" id="themeIcon"></i></div>
                                 <div class="user-profile">
                                     <div class="user-avatar"><i class="fa-solid fa-user"></i></div>
@@ -794,9 +806,23 @@
         const unsubscribers = [];
         const listenersReady = { resignations: false, nssf: false, donations: false, users: false, config: false };
         let allReadyFired = false;
+        let syncOk = false;
+
+        function setSyncStatus(status) {
+            const dot = document.getElementById('syncDot');
+            const text = document.getElementById('syncText');
+            if (!dot || !text) return;
+            dot.className = 'sync-dot ' + status;
+            if (status === 'connected') { text.textContent = 'Connected'; text.style.color = '#2ecc71'; syncOk = true; }
+            else if (status === 'connecting') { text.textContent = 'Connecting'; text.style.color = 'var(--text-muted)'; syncOk = false; }
+            else if (status === 'disconnected') { text.textContent = 'Disconnected'; text.style.color = '#e74c3c'; syncOk = false; }
+        }
+        window.addEventListener('online', () => { if (!syncOk) setSyncStatus('connecting'); });
+        window.addEventListener('offline', () => setSyncStatus('disconnected'));
 
         function setupFirestoreListener(collection, stateKey) {
             const unsub = db_fs.collection(collection).onSnapshot((snapshot) => {
+                if (!syncOk) setSyncStatus('connected');
                 if (stateKey === 'config') {
                     db.config = {};
                     snapshot.forEach(doc => { db.config[doc.id] = doc.data(); });
@@ -815,6 +841,7 @@
                 }
             }, (err) => {
                 console.error('Firestore listener error:', err);
+                setSyncStatus('disconnected');
                 showNotification('Real-time sync error. Check console.', 'error');
             });
             unsubscribers.push(unsub);
