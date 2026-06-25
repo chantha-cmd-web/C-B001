@@ -476,16 +476,16 @@
                                 <div class="form-group"><label>Staff Name</label><input type="text" id="res-name" class="form-control" required></div>
                                 <div class="form-group"><label>Position</label><input type="text" id="res-position" class="form-control" required></div>
                                 <div class="form-group"><label>Nationality</label><input type="text" id="res-nationality" class="form-control" required placeholder="e.g., Cambodian"></div>
-                                <input type="hidden" id="res-campus">
-                                <input type="hidden" id="res-department">
-                                <input type="hidden" id="res-status">
+                                <div class="form-group"><label>Campus</label><input type="text" id="res-campus" class="form-control" readonly placeholder="Auto-filled"></div>
+                                <div class="form-group"><label>Department</label><input type="text" id="res-department" class="form-control" readonly placeholder="Auto-filled"></div>
+                                <div class="form-group"><label>Status</label><input type="text" id="res-status" class="form-control" readonly placeholder="Auto-filled"></div>
                                 <div class="form-group"><label>Reason Left</label>
                                     <select id="res-reason" class="form-control" required>
                                         <option value="Resign">Resign</option><option value="Terminate">Terminate</option><option value="Abandonment">Abandonment</option><option value="End of Contract">End of Contract</option>
                                     </select>
                                 </div>
-                                <input type="hidden" id="res-start">
-                                <input type="hidden" id="res-end">
+                                <div class="form-group"><label>Start Date</label><input type="date" id="res-start" class="form-control" readonly></div>
+                                <div class="form-group"><label>Last Working Day</label><input type="date" id="res-end" class="form-control" readonly></div>
                                 <div class="form-group"><label>Clearance Status</label>
                                     <select id="res-clearance" class="form-control" required>
                                         <option value="Yes">Cleared</option><option value="No">Pending</option>
@@ -580,8 +580,8 @@
                             <div class="form-grid">
                                 <div class="form-group"><label>Staff ID</label><input type="text" id="don-id" class="form-control" required oninput="autoFillDonation(this.value)" onblur="autoFillDonation(this.value)" placeholder="Type ID to auto-fill"></div>
                                 <div class="form-group"><label>Staff Name</label><input type="text" id="don-name" class="form-control" required></div>
-                                <input type="hidden" id="don-campus">
-                                <input type="hidden" id="don-status">
+                                <div class="form-group"><label>Campus</label><input type="text" id="don-campus" class="form-control" readonly placeholder="Auto-filled"></div>
+                                <div class="form-group"><label>Status</label><input type="text" id="don-status" class="form-control" readonly placeholder="Auto-filled"></div>
                                 <div class="form-group"><label>Donation Type</label><select id="don-type" class="form-control" required><option value="Wedding">Wedding</option><option value="Funeral">Funeral</option><option value="Maternity">Maternity</option><option value="Hospitalization">Hospitalization</option><option value="Other">Other</option></select></div>
                                 <div class="form-group"><label>Amount (USD)</label><input type="number" step="0.01" id="don-amount" class="form-control" required></div>
                                 <div class="form-group"><label>Date</label><input type="date" id="don-date" class="form-control" required></div>
