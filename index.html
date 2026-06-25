@@ -9,6 +9,8 @@
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
@@ -747,6 +749,18 @@
     </div>
 
     <script>
+        const firebaseConfig = {
+          apiKey: "AIzaSyBczCKI-x1GZkwl3_f0APYY3bthlOlBAP8",
+          authDomain: "c-b-new.firebaseapp.com",
+          projectId: "c-b-new",
+          storageBucket: "c-b-new.firebasestorage.app",
+          messagingSenderId: "402444149630",
+          appId: "1:402444149630:web:2c537201fb83f428eb092f",
+          measurementId: "G-6CRD524TGS"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db_fs = firebase.firestore();
+
         function getTheme() { try { return localStorage.getItem('cb_theme') || 'day'; } catch(e) { return 'day'; } }
         function setTheme(theme) {
             document.documentElement.setAttribute('data-theme', theme);
@@ -773,50 +787,66 @@
             else if(v.includes('dash')||v.includes('home')||v.includes('overview')) switchView('dashboard-view');
         }
 
-        let db = { resignations: [], nssf: [], donations: [], users: [{ id: "u1", username: "admin", fullname: "HR Administrator", password: "C&B123", role: "Super Admin", createdDate: new Date().toLocaleDateString(), createdBy: "System" }], telegram: {} };
+        let db = { resignations: [], nssf: [], donations: [], users: [], config: {} };
         let currentUser = null;
         let chartInstance = null;
+        let currentFilters = { res: {}, nssf: {}, don: {} };
+        const unsubscribers = [];
+        const listenersReady = { resignations: false, nssf: false, donations: false, users: false, config: false };
+        let allReadyFired = false;
 
-
-
-
-
-        function seedMockData() {
-            const now = Date.now();
-            db.resignations = [
-                { id: "r1", staffId: "2102", name: "NITA", nationality: "Cambodian", campus: "BCH", department: "Academic", position: "Teacher", status: "Full-time", reason: "End of Contract", start: "2024-05-01", end: "2026-04-30", clearance: "Yes", filename: "clearance_2102.pdf", timestamp: now - 86400000 },
-                { id: "r2", staffId: "1984", name: "SOKHA T.", nationality: "Cambodian", campus: "CEN", department: "Operations", position: "Admin", status: "Full-time", reason: "Resign", start: "2022-01-15", end: "2026-05-15", clearance: "No", filename: "resignation_1984.pdf", timestamp: now - 172800000 }
-            ];
-            db.nssf = [{ id: "n1", month: "January", year: "2026", staff: "145", amount: 2150.50, filename: "NSSF_Jan_2026.pdf", timestamp: now - 5000000000 }];
-            db.donations = [{ id: "d1", staffId: "1105", name: "CHANTY", campus: "CEN", status: "Full-time", type: "Wedding", amount: 50.00, date: "2026-02-14", filename: "wedding_1105.pdf", timestamp: now - 3000000000 }];
-            db.telegram = { token: "8762629026:AAGWtrMC9LmdGyr41CQ07bLM6jbZZRJZ020", chatId: "-1003596479947", fileName: "CB_Report" };
-            saveDb(false);
-        }
-
-        function initApp() {
-            try {
-                const stored = localStorage.getItem('cb_system_db');
-                if (stored) {
-                    db = JSON.parse(stored);
-                    if(!db.users || db.users.length === 0) { db.users = [{ id: "u1", username: "admin", fullname: "HR Administrator", password: "C&B123", role: "Super Admin", createdDate: new Date().toLocaleDateString(), createdBy: "System" }]; }
-                    if(!db.telegram || (!db.telegram.token && !db.telegram.chatId)) db.telegram = { token: "8762629026:AAGWtrMC9LmdGyr41CQ07bLM6jbZZRJZ020", chatId: "-1003596479947", fileName: "CB_Report" };
+        function setupFirestoreListener(collection, stateKey) {
+            const unsub = db_fs.collection(collection).onSnapshot((snapshot) => {
+                if (stateKey === 'config') {
+                    db.config = {};
+                    snapshot.forEach(doc => { db.config[doc.id] = doc.data(); });
                 } else {
-                    seedMockData();
+                    db[stateKey] = [];
+                    snapshot.forEach(doc => { db[stateKey].push({ id: doc.id, ...doc.data() }); });
                 }
-            } catch (e) { console.error(e); }
+                listenersReady[stateKey] = true;
+                if (!allReadyFired && Object.values(listenersReady).every(v => v)) {
+                    allReadyFired = true;
+                    afterFirestoreReady();
+                }
+                if (currentUser) {
+                    updateAllViews();
+                    if (document.getElementById('telegramModal').style.display === 'flex') populateTelegramModal();
+                }
+            }, (err) => {
+                console.error('Firestore listener error:', err);
+                showNotification('Real-time sync error. Check console.', 'error');
+            });
+            unsubscribers.push(unsub);
         }
 
-        function saveDb(notify = true) {
-            try {
-                localStorage.setItem('cb_system_db', JSON.stringify(db));
-                if(currentUser) updateAllViews();
-            } catch (e) {
-                if(notify) showNotification('Error saving data. Storage might be full.', 'error');
+        function afterFirestoreReady() {
+            if (db.users.length === 0) {
+                db_fs.collection('users').add({
+                    username: 'admin', fullname: 'HR Administrator',
+                    password: 'C&B123', role: 'Super Admin',
+                    createdDate: new Date().toLocaleDateString(), createdBy: 'System'
+                });
+            }
+            if (!db.config.telegram) {
+                db_fs.collection('config').doc('telegram').set({
+                    token: '8762629026:AAGWtrMC9LmdGyr41CQ07bLM6jbZZRJZ020',
+                    chatId: '-1003596479947', fileName: 'CB_Report'
+                });
             }
         }
 
+        function initFirestore() {
+            db.resignations = []; db.nssf = []; db.donations = []; db.users = []; db.config = {};
+            setupFirestoreListener('resignations', 'resignations');
+            setupFirestoreListener('nssf', 'nssf');
+            setupFirestoreListener('donations', 'donations');
+            setupFirestoreListener('users', 'users');
+            setupFirestoreListener('config', 'config');
+        }
+
         function checkAuth() {
-            initApp();
+            initFirestore();
             const storedUser = sessionStorage.getItem('cb_logged_user');
             if (storedUser) {
                 currentUser = JSON.parse(storedUser);
@@ -825,7 +855,6 @@
                 document.getElementById('login-container').style.display = 'none';
                 document.getElementById('app-container').style.display = 'flex';
                 switchView('dashboard-view');
-                updateAllViews();
             } else {
                 document.getElementById('login-container').style.display = 'flex';
                 document.getElementById('app-container').style.display = 'none';
@@ -834,7 +863,7 @@
 
         function handleLogin(e) {
             e.preventDefault();
-            initApp();
+            if (!listenersReady.users) { showNotification('Loading user data, please wait...', 'error'); return; }
             const user = document.getElementById('login-user').value;
             const pass = document.getElementById('login-pass').value;
             const foundUser = db.users.find(u => u.username === user && u.password === pass);
@@ -949,8 +978,6 @@
             });
         }
 
-        let currentFilters = { res: {}, nssf: {}, don: {} };
-
         function applyFilters(type) {
             if(type === 'res') {
                 currentFilters.res = { search: document.getElementById('filter-res-search').value.toLowerCase(), campus: document.getElementById('filter-res-campus').value, dept: document.getElementById('filter-res-dept').value, reason: document.getElementById('filter-res-reason').value, clearance: document.getElementById('filter-res-clearance').value };
@@ -977,11 +1004,16 @@
             const fileInput = document.getElementById('res-file');
             let fileData = null, filename = 'No file';
             if (fileInput.files.length > 0) { fileData = await getBase64(fileInput.files[0]); filename = fileInput.files[0].name; } 
-            else if (editId) { const existing = db.resignations.find(r => r.id === editId); fileData = existing.fileData; filename = existing.filename; }
-            const record = { id: editId || Date.now().toString(), staffId: document.getElementById('res-id').value, name: document.getElementById('res-name').value, nationality: document.getElementById('res-nationality').value, campus: document.getElementById('res-campus').value, department: document.getElementById('res-department').value, position: document.getElementById('res-position').value, status: document.getElementById('res-status').value, reason: document.getElementById('res-reason').value, start: document.getElementById('res-start').value, end: document.getElementById('res-end').value, clearance: document.getElementById('res-clearance').value, filename: filename, fileData: fileData, timestamp: Date.now() };
-            if (editId) { const idx = db.resignations.findIndex(r => r.id === editId); db.resignations[idx] = record; showNotification('Record updated.'); } 
-            else { db.resignations.push(record); showNotification('Record added.'); }
-            saveDb(); document.getElementById('resignation-form').reset(); document.getElementById('res-edit-id').value = ''; document.getElementById('res-file-label').innerHTML = '<i class="fa-solid fa-cloud-arrow-up"></i> Click here to Upload PDF'; document.getElementById('res-campus').value = ''; document.getElementById('res-form-title').innerText = 'Add New Record'; document.getElementById('res-submit-btn').innerHTML = '<i class="fa-solid fa-save"></i> Save Record'; document.getElementById('res-cancel-btn').style.display = 'none';
+            else if (editId) { const existing = db.resignations.find(r => r.id === editId); if (existing) { fileData = existing.fileData; filename = existing.filename; } }
+            const data = { staffId: document.getElementById('res-id').value, name: document.getElementById('res-name').value, nationality: document.getElementById('res-nationality').value, campus: document.getElementById('res-campus').value, department: document.getElementById('res-department').value, position: document.getElementById('res-position').value, status: document.getElementById('res-status').value, reason: document.getElementById('res-reason').value, start: document.getElementById('res-start').value, end: document.getElementById('res-end').value, clearance: document.getElementById('res-clearance').value, filename: filename, fileData: fileData, timestamp: Date.now() };
+            if (editId) {
+                await db_fs.collection('resignations').doc(editId).set(data, { merge: true });
+                showNotification('Record updated.');
+            } else {
+                await db_fs.collection('resignations').add(data);
+                showNotification('Record added.');
+            }
+            document.getElementById('resignation-form').reset(); document.getElementById('res-edit-id').value = ''; document.getElementById('res-file-label').innerHTML = '<i class="fa-solid fa-cloud-arrow-up"></i> Click here to Upload PDF'; document.getElementById('res-campus').value = ''; document.getElementById('res-form-title').innerText = 'Add New Record'; document.getElementById('res-submit-btn').innerHTML = '<i class="fa-solid fa-save"></i> Save Record'; document.getElementById('res-cancel-btn').style.display = 'none';
         }
 
         function renderResignations() {
@@ -1001,12 +1033,17 @@
             const fileInput = document.getElementById('nssf-file');
             let fileData = null, filename = 'No file';
             if (fileInput.files.length > 0) { fileData = await getBase64(fileInput.files[0]); filename = fileInput.files[0].name; } 
-            else if (editId) { const existing = db.nssf.find(r => r.id === editId); fileData = existing.fileData; filename = existing.filename; } 
+            else if (editId) { const existing = db.nssf.find(r => r.id === editId); if (existing) { fileData = existing.fileData; filename = existing.filename; } } 
             else { showNotification('Please attach an NSSF PDF file.','error'); return; }
-            const record = { id: editId || Date.now().toString(), month: document.getElementById('nssf-month').value, year: document.getElementById('nssf-year').value, staff: document.getElementById('nssf-staff').value, amount: parseFloat(document.getElementById('nssf-amount').value), filename: filename, fileData: fileData, timestamp: Date.now() };
-            if (editId) { const idx = db.nssf.findIndex(r => r.id === editId); db.nssf[idx] = record; showNotification('Record updated.'); } 
-            else { db.nssf.push(record); showNotification('Record uploaded.'); }
-            saveDb(); cancelEdit('nssf');
+            const data = { month: document.getElementById('nssf-month').value, year: document.getElementById('nssf-year').value, staff: document.getElementById('nssf-staff').value, amount: parseFloat(document.getElementById('nssf-amount').value), filename: filename, fileData: fileData, timestamp: Date.now() };
+            if (editId) {
+                await db_fs.collection('nssf').doc(editId).set(data, { merge: true });
+                showNotification('Record updated.');
+            } else {
+                await db_fs.collection('nssf').add(data);
+                showNotification('Record uploaded.');
+            }
+            cancelEdit('nssf');
         }
 
         function renderNssf() {
@@ -1023,11 +1060,16 @@
             const fileInput = document.getElementById('don-file');
             let fileData = null, filename = 'No file';
             if (fileInput.files.length > 0) { fileData = await getBase64(fileInput.files[0]); filename = fileInput.files[0].name; } 
-            else if (editId) { const existing = db.donations.find(r => r.id === editId); fileData = existing.fileData; filename = existing.filename; }
-            const record = { id: editId || Date.now().toString(), staffId: document.getElementById('don-id').value, name: document.getElementById('don-name').value, campus: document.getElementById('don-campus').value, status: document.getElementById('don-status').value, type: document.getElementById('don-type').value, amount: parseFloat(document.getElementById('don-amount').value), date: document.getElementById('don-date').value, filename: filename, fileData: fileData, timestamp: Date.now() };
-            if (editId) { const idx = db.donations.findIndex(r => r.id === editId); db.donations[idx] = record; showNotification('Record updated.'); } 
-            else { db.donations.push(record); showNotification('Record saved.'); }
-            saveDb(); document.getElementById('donation-form').reset(); document.getElementById('don-edit-id').value = ''; document.getElementById('don-file-label').innerHTML = '<i class="fa-solid fa-cloud-arrow-up"></i> Click here to Upload PDF'; document.getElementById('don-campus').value = ''; document.getElementById('don-form-title').innerText = 'Add Donation Record'; document.getElementById('don-submit-btn').innerHTML = '<i class="fa-solid fa-save"></i> Save Record'; document.getElementById('don-cancel-btn').style.display = 'none';
+            else if (editId) { const existing = db.donations.find(r => r.id === editId); if (existing) { fileData = existing.fileData; filename = existing.filename; } }
+            const data = { staffId: document.getElementById('don-id').value, name: document.getElementById('don-name').value, campus: document.getElementById('don-campus').value, status: document.getElementById('don-status').value, type: document.getElementById('don-type').value, amount: parseFloat(document.getElementById('don-amount').value), date: document.getElementById('don-date').value, filename: filename, fileData: fileData, timestamp: Date.now() };
+            if (editId) {
+                await db_fs.collection('donations').doc(editId).set(data, { merge: true });
+                showNotification('Record updated.');
+            } else {
+                await db_fs.collection('donations').add(data);
+                showNotification('Record saved.');
+            }
+            document.getElementById('donation-form').reset(); document.getElementById('don-edit-id').value = ''; document.getElementById('don-file-label').innerHTML = '<i class="fa-solid fa-cloud-arrow-up"></i> Click here to Upload PDF'; document.getElementById('don-campus').value = ''; document.getElementById('don-form-title').innerText = 'Add Donation Record'; document.getElementById('don-submit-btn').innerHTML = '<i class="fa-solid fa-save"></i> Save Record'; document.getElementById('don-cancel-btn').style.display = 'none';
         }
 
         function renderDonations() {
@@ -1039,11 +1081,10 @@
             document.getElementById('donation-table-body').innerHTML = data.map(d => `<tr><td><strong>${d.staffId}</strong></td><td>${d.name}</td><td><span class="badge badge-cyan">${d.campus||'-'}</span></td><td><span class="badge badge-gray">${d.type}</span></td><td style="color:var(--success);font-weight:bold;">$${parseFloat(d.amount).toFixed(2)}</td><td>${d.date}</td><td>${d.fileData?`<i class="fa-solid fa-file-pdf" style="color:var(--danger);font-size:1.2rem;"></i>`:'-'}</td><td><div class="action-btns"><button class="btn btn-primary btn-sm" onclick="editRecord('donations','${d.id}','don')"><i class="fa-solid fa-pen-to-square"></i></button><button class="btn btn-gray btn-sm" onclick="openPdfViewer('donations','${d.id}')"><i class="fa-solid fa-eye"></i></button><button class="btn btn-danger btn-sm" onclick="deleteRecord('donations','${d.id}')"><i class="fa-solid fa-trash"></i></button></div></td></tr>`).join('')||'<tr><td colspan="8" style="text-align:center;padding:20px;">No records found.</td></tr>';
         }
 
-        function deleteRecord(collection, id) {
+        async function deleteRecord(collection, id) {
             if(confirm('Are you sure you want to delete this record?')) {
-                const record = db[collection].find(r => r.id === id);
-                db[collection] = db[collection].filter(item => item.id !== id);
-                saveDb(); showNotification('Record deleted.');
+                await db_fs.collection(collection).doc(id).delete();
+                showNotification('Record deleted.');
             }
         }
 
@@ -1093,11 +1134,14 @@
             if(currentUser) { renderDashboard(); renderResignations(); renderNssf(); renderDonations(); }
         }
 
-        function resetSystem() {
+        async function resetSystem() {
             if(confirm('WARNING: This will permanently delete ALL system records and files. Continue?')) {
-                localStorage.removeItem('cb_system_db');
-                db = { resignations: [], nssf: [], donations: [], users: [{ id: "u1", username: "admin", fullname: "HR Administrator", password: "C&B123", role: "Super Admin", createdDate: new Date().toLocaleDateString(), createdBy: "System" }], telegram: db.telegram };
-                saveDb(); updateAllViews();
+                for (const coll of ['resignations', 'nssf', 'donations']) {
+                    const snapshot = await db_fs.collection(coll).get();
+                    const batch = db_fs.batch();
+                    snapshot.forEach(doc => batch.delete(doc.ref));
+                    await batch.commit();
+                }
                 showNotification('System factory reset complete. All data has been cleared.');
             }
         }
@@ -1107,15 +1151,25 @@
             const dlAnchorElem = document.createElement('a'); dlAnchorElem.setAttribute("href",dataStr); dlAnchorElem.setAttribute("download",`CBS_Backup_${new Date().toISOString().split('T')[0]}.json`); dlAnchorElem.click(); showNotification('JSON Backup Downloaded.');
         }
 
-        function importJSON() {
+        async function importJSON() {
             const fileInput = document.getElementById('import-json');
             if(fileInput.files.length === 0) { showNotification('Please select a JSON file.','error'); return; }
             const reader = new FileReader();
-            reader.onload = function(e) {
+            reader.onload = async function(e) {
                 try { 
                     const importedDb = JSON.parse(e.target.result); 
-                    if(importedDb.resignations) { db = importedDb; saveDb(); showNotification('Database restored from JSON.'); fileInput.value = ""; } 
-                    else showNotification('Invalid JSON format.','error'); 
+                    if(!importedDb.resignations) { showNotification('Invalid JSON format.','error'); return; }
+                    for (const coll of ['resignations', 'nssf', 'donations']) {
+                        if (importedDb[coll]) {
+                            for (const item of importedDb[coll]) {
+                                const { id, ...data } = item;
+                                if (id) await db_fs.collection(coll).doc(id).set(data);
+                                else await db_fs.collection(coll).add(data);
+                            }
+                        }
+                    }
+                    showNotification('Database restored from JSON.');
+                    fileInput.value = '';
                 } catch(err) { showNotification('Error parsing JSON file.','error'); }
             }; reader.readAsText(fileInput.files[0]);
         }
@@ -1130,18 +1184,23 @@
             XLSX.writeFile(wb, `CBS_Export_${new Date().toISOString().split('T')[0]}.xlsx`); showNotification('Excel file generated.');
         }
 
+        function populateTelegramModal() {
+            document.getElementById('tg-token').value = db.config.telegram?.token || '8762629026:AAGWtrMC9LmdGyr41CQ07bLM6jbZZRJZ020';
+            document.getElementById('tg-chat').value = db.config.telegram?.chatId || '-1003596479947';
+            document.getElementById('tg-filename').value = db.config.telegram?.fileName || 'CB_Report';
+        }
+
         function openTelegramModal() {
-            document.getElementById('tg-token').value = db.telegram?.token || '8762629026:AAGWtrMC9LmdGyr41CQ07bLM6jbZZRJZ020';
-            document.getElementById('tg-chat').value = db.telegram?.chatId || '-1003596479947';
-            document.getElementById('tg-filename').value = db.telegram?.fileName || 'CB_Report';
+            populateTelegramModal();
             document.getElementById('telegramModal').style.display = 'flex';
         }
 
         function closeTelegramModal() { document.getElementById('telegramModal').style.display = 'none'; }
 
         function saveTelegramSettings() {
-            db.telegram = { token: document.getElementById('tg-token').value.trim(), chatId: document.getElementById('tg-chat').value.trim(), fileName: document.getElementById('tg-filename').value.trim() || 'CB_Report' };
-            saveDb(); showNotification('Telegram settings saved successfully.'); closeTelegramModal();
+            const data = { token: document.getElementById('tg-token').value.trim(), chatId: document.getElementById('tg-chat').value.trim(), fileName: document.getElementById('tg-filename').value.trim() || 'CB_Report' };
+            db_fs.collection('config').doc('telegram').set(data);
+            showNotification('Telegram settings saved successfully.'); closeTelegramModal();
         }
 
         function clearTelegramSettings() {
@@ -1164,19 +1223,20 @@
         }
 
         async function sendBackupToTelegram() {
-            if(!db.telegram?.token || !db.telegram?.chatId) { showNotification('Please configure Telegram settings first.','error'); openTelegramModal(); return; }
+            const tg = db.config.telegram || {};
+            if(!tg.token || !tg.chatId) { showNotification('Please configure Telegram settings first.','error'); openTelegramModal(); return; }
             showNotification('Preparing backup and sending to Telegram...','success');
             try {
                 const dataStr = JSON.stringify(db, null, 2);
                 const blob = new Blob([dataStr], { type:'application/json' });
                 const fileDate = new Date().toISOString().split('T')[0];
-                const fileName = `${db.telegram.fileName || 'CB_Backup'}_${fileDate}.json`;
+                const fileName = `${tg.fileName || 'CB_Backup'}_${fileDate}.json`;
                 const formData = new FormData();
-                formData.append('chat_id', db.telegram.chatId);
+                formData.append('chat_id', tg.chatId);
                 formData.append('document', blob, fileName);
                 formData.append('caption', `📦 *System Backup Data*\nGenerated on: ${new Date().toLocaleString()}\nBy: ${currentUser.fullname}`);
                 formData.append('parse_mode', 'Markdown');
-                const response = await fetch(`https://api.telegram.org/bot${db.telegram.token}/sendDocument`, { method:'POST', body: formData });
+                const response = await fetch(`https://api.telegram.org/bot${tg.token}/sendDocument`, { method:'POST', body: formData });
                 const result = await response.json();
                 if(result.ok) { showNotification('Backup successfully sent to Telegram!','success'); }
                 else showNotification(`Telegram Error: ${result.description}`,'error');
