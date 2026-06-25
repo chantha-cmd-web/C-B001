@@ -476,34 +476,16 @@
                                 <div class="form-group"><label>Staff Name</label><input type="text" id="res-name" class="form-control" required></div>
                                 <div class="form-group"><label>Position</label><input type="text" id="res-position" class="form-control" required></div>
                                 <div class="form-group"><label>Nationality</label><input type="text" id="res-nationality" class="form-control" required placeholder="e.g., Cambodian"></div>
-                                <div class="form-group"><label>Campus</label>
-                                    <select id="res-campus" class="form-control" required>
-                                        <option value="" disabled selected>Select Campus</option>
-                                        <option value="BCH">BCH</option><option value="BKK">BKK</option><option value="BTB1">BTB1</option>
-                                        <option value="BTB2">BTB2</option><option value="BTB3">BTB3</option><option value="CAR">CAR</option>
-                                        <option value="CEN">CEN</option><option value="CKD1">CKD1</option><option value="CKD2">CKD2</option>
-                                        <option value="DNG">DNG</option><option value="SHV">SHV</option><option value="SSK">SSK</option>
-                                        <option value="SOW">SOW</option><option value="STD">STD</option><option value="TSK">TSK</option><option value="VSB">VSB</option>
-                                    </select>
-                                </div>
-                                <div class="form-group"><label>Department</label>
-                                    <select id="res-department" class="form-control" required>
-                                        <option value="Academic">Academic</option><option value="Academics">Academics</option><option value="Operations">Operations</option><option value="Finance">Finance</option>
-                                    </select>
-                                </div>
-                                <div class="form-group"><label>Status</label>
-                                    <select id="res-status" class="form-control" required>
-                                        <option value="Full-time">Full-time</option><option value="Part-time">Part-time</option>
-                                        <option value="Semi-full-time">Semi-full-time</option><option value="Temporary">Temporary</option>
-                                    </select>
-                                </div>
+                                <input type="hidden" id="res-campus">
+                                <input type="hidden" id="res-department">
+                                <input type="hidden" id="res-status">
                                 <div class="form-group"><label>Reason Left</label>
                                     <select id="res-reason" class="form-control" required>
                                         <option value="Resign">Resign</option><option value="Terminate">Terminate</option><option value="Abandonment">Abandonment</option><option value="End of Contract">End of Contract</option>
                                     </select>
                                 </div>
-                                <div class="form-group"><label>Start Date</label><input type="date" id="res-start" class="form-control" required></div>
-                                <div class="form-group"><label>Last Working Day</label><input type="date" id="res-end" class="form-control" required></div>
+                                <input type="hidden" id="res-start">
+                                <input type="hidden" id="res-end">
                                 <div class="form-group"><label>Clearance Status</label>
                                     <select id="res-clearance" class="form-control" required>
                                         <option value="Yes">Cleared</option><option value="No">Pending</option>
@@ -855,7 +837,7 @@
         let staffLookup = {};
         let staffMasterReady = false;
         let deferredFill = null;
-        const MASTER_LIST_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTO68GX9WFErMXR7GxUbaAybv0Vu-Cuia482ACsE8LDVOy_g_fAmvuEG7Y6WTSAII_PG521XZoBgBM_/pub?output=csv&gid=0';
+        const MASTER_LIST_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTO68GX9WFErMXR7GxUbaAybv0Vu-Cuia482ACsE8LDVOy_g_fAmvuEG7Y6WTSAII_PG521XZoBgBM_/pub?output=csv';
 
         function parseCSV(text) {
             const rows = []; let row = [], field = '', inQ = false;
