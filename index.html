@@ -11,6 +11,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-storage-compat.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
@@ -495,7 +496,7 @@
                                     <label>Attach Document (PDF)</label>
                                     <div class="file-upload-wrapper">
                                         <div class="file-upload-btn" id="res-file-label"><i class="fa-solid fa-cloud-arrow-up"></i> Click here to Upload PDF Document</div>
-                                        <input type="file" id="res-file" accept=".pdf" onchange="updateFileLabel(this, 'res-file-label')">
+                                        <input type="file" id="res-file" accept=".pdf" multiple onchange="updateFileLabel(this, 'res-file-label')">
                                     </div>
                                 </div>
                             </div>
@@ -538,7 +539,7 @@
                                 <div class="form-group"><label>Total Contribution (USD)</label><input type="number" step="0.01" id="nssf-amount" class="form-control" required></div>
                                 <div class="form-group full-width">
                                     <label>Upload NSSF File (PDF)</label>
-                                    <div class="file-upload-wrapper"><div class="file-upload-btn" id="nssf-file-label"><i class="fa-solid fa-cloud-arrow-up"></i> Click here to Upload NSSF PDF</div><input type="file" id="nssf-file" accept=".pdf" onchange="updateFileLabel(this, 'nssf-file-label')"></div>
+                                    <div class="file-upload-wrapper"><div class="file-upload-btn" id="nssf-file-label"><i class="fa-solid fa-cloud-arrow-up"></i> Click here to Upload NSSF PDF</div><input type="file" id="nssf-file" accept=".pdf" multiple onchange="updateFileLabel(this, 'nssf-file-label')"></div>
                                 </div>
                             </div>
                             <div style="display: flex; gap: 10px;">
@@ -587,7 +588,7 @@
                                 <div class="form-group"><label>Date</label><input type="date" id="don-date" class="form-control" required></div>
                                 <div class="form-group full-width">
                                     <label>Attach Proof (PDF)</label>
-                                    <div class="file-upload-wrapper"><div class="file-upload-btn" id="don-file-label"><i class="fa-solid fa-cloud-arrow-up"></i> Click here to Upload PDF Proof</div><input type="file" id="don-file" accept=".pdf" onchange="updateFileLabel(this, 'don-file-label')"></div>
+                                    <div class="file-upload-wrapper"><div class="file-upload-btn" id="don-file-label"><i class="fa-solid fa-cloud-arrow-up"></i> Click here to Upload PDF Proof</div><input type="file" id="don-file" accept=".pdf" multiple onchange="updateFileLabel(this, 'don-file-label')"></div>
                                 </div>
                             </div>
                             <div style="display: flex; gap: 10px;">
@@ -742,6 +743,7 @@
         };
         firebase.initializeApp(firebaseConfig);
         const db_fs = firebase.firestore();
+        const storage_fs = firebase.storage();
 
         function getTheme() { try { return localStorage.getItem('cb_theme') || 'day'; } catch(e) { return 'day'; } }
         function setTheme(theme) {
