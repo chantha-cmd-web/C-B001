@@ -471,7 +471,7 @@
                         <form id="resignation-form" onsubmit="handleResignationSubmit(event)">
                             <input type="hidden" id="res-edit-id">
                             <div class="form-grid">
-                                <div class="form-group"><label>Staff ID</label><input type="text" id="res-id" class="form-control" required oninput="autoFillResignation(this.value)" placeholder="Type ID to auto-fill"></div>
+                                <div class="form-group"><label>Staff ID</label><input type="text" id="res-id" class="form-control" required oninput="autoFillResignation(this.value)" onblur="autoFillResignation(this.value)" placeholder="Type ID to auto-fill"></div>
                                 <div class="form-group"><label>Staff Name</label><input type="text" id="res-name" class="form-control" required></div>
                                 <div class="form-group"><label>Position</label><input type="text" id="res-position" class="form-control" required></div>
                                 <div class="form-group"><label>Nationality</label><input type="text" id="res-nationality" class="form-control" required placeholder="e.g., Cambodian"></div>
@@ -602,7 +602,7 @@
                         <form id="donation-form" onsubmit="handleDonationSubmit(event)">
                             <input type="hidden" id="don-edit-id">
                             <div class="form-grid">
-                                <div class="form-group"><label>Staff ID</label><input type="text" id="don-id" class="form-control" required oninput="autoFillDonation(this.value)" placeholder="Type ID to auto-fill"></div>
+                                <div class="form-group"><label>Staff ID</label><input type="text" id="don-id" class="form-control" required oninput="autoFillDonation(this.value)" onblur="autoFillDonation(this.value)" placeholder="Type ID to auto-fill"></div>
                                 <div class="form-group"><label>Staff Name</label><input type="text" id="don-name" class="form-control" required></div>
                                 <div class="form-group"><label>Campus</label><select id="don-campus" class="form-control" required><option value="" disabled selected>Select Campus</option><option value="BCH">BCH</option><option value="BKK">BKK</option><option value="BTB1">BTB1</option><option value="BTB2">BTB2</option><option value="BTB3">BTB3</option><option value="CAR">CAR</option><option value="CEN">CEN</option><option value="CKD1">CKD1</option><option value="CKD2">CKD2</option><option value="DNG">DNG</option><option value="SHV">SHV</option><option value="SSK">SSK</option><option value="SOW">SOW</option><option value="STD">STD</option><option value="TSK">TSK</option><option value="VSB">VSB</option></select></div>
                                 <div class="form-group"><label>Status</label><select id="don-status" class="form-control" required><option value="Full-time">Full-time</option><option value="Part-time">Part-time</option><option value="Semi-full-time">Semi-full-time</option><option value="Temporary">Temporary</option></select></div>
@@ -863,17 +863,24 @@
         let staffMasterData = [];
         let staffLookup = {};
         const MASTER_LIST_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTO68GX9WFErMXR7GxUbaAybv0Vu-Cuia482ACsE8LDVOy_g_fAmvuEG7Y6WTSAII_PG521XZoBgBM_/pub?output=csv&gid=0';
-        const HEADER_MAP = { staffId:1, name:2, nationality:5, status:8, start:10, campus:12, position:13, department:14, lastDay: null };
 
         function parseCSV(text) {
-            const rows = [], re = /(?!\s*$)\s*(?:"([^"]*(?:""[^"]*)*)"|([^,"\s]*))\s*(?:,|$)/g;
-            let row = [], col = 0, m;
-            while (m = re.exec(text)) {
-                row[col] = m[1] !== undefined ? m[1].replace(/""/g, '"') : m[2];
-                col++;
-                if (text[m.index + m[0].length] !== ',') { rows.push(row); row = []; col = 0; }
+            const rows = []; let row = [], field = '', inQ = false;
+            for (let i = 0; i < text.length; i++) {
+                const c = text[i];
+                if (inQ) {
+                    if (c === '"' && text[i+1] === '"') { field += '"'; i++; }
+                    else if (c === '"') inQ = false;
+                    else field += c;
+                } else {
+                    if (c === '"') inQ = true;
+                    else if (c === ',') { row.push(field); field = ''; }
+                    else if (c === '\n') { row.push(field); if (row.length) rows.push(row); row = []; field = ''; }
+                    else if (c === '\r') { row.push(field); if (row.length) rows.push(row); row = []; field = ''; if (text[i+1] === '\n') i++; }
+                    else field += c;
+                }
             }
-            if (row.length) rows.push(row);
+            if (field || row.length) { row.push(field); if (row.length) rows.push(row); }
             return rows;
         }
 
@@ -884,24 +891,42 @@
             return -1;
         }
 
+        function normalizeStatus(val) {
+            const s = val.trim().toLowerCase();
+            if (s === 'full-time' || s === 'full time') return 'Full-time';
+            if (s === 'part-time' || s === 'part time') return 'Part-time';
+            if (s === 'semi-full-time' || s === 'semi full time') return 'Semi-full-time';
+            if (s === 'temporary') return 'Temporary';
+            return val.trim();
+        }
+
         async function fetchMasterList() {
             try {
                 const resp = await fetch(MASTER_LIST_URL);
                 const csv = await resp.text();
-                const rows = parseCSV(csv);
-                const headerRow = rows.find(r => r[1] && r[1].trim() === 'Staff ID');
-                if (!headerRow) return;
+                const allRows = parseCSV(csv);
+                const headerRow = allRows.find(r => r[1] && r[1].trim() === 'Staff ID');
+                if (!headerRow) { console.warn('Master List: header row not found'); return; }
                 const idx = { staffId:1, name:2, nationality: findHeaderIndex(headerRow, 'Nationality'), status: findHeaderIndex(headerRow, "Staff's Type"), start: findHeaderIndex(headerRow, 'DOJ'), campus: findHeaderIndex(headerRow, 'Campus'), position: findHeaderIndex(headerRow, 'Current Position'), department: findHeaderIndex(headerRow, 'Department'), lastDay: findHeaderIndex(headerRow, 'Last day of Employee') };
-                staffMasterData = [];
-                staffLookup = {};
-                for (const row of rows) {
-                    const sid = row[idx.staffId];
+                staffMasterData = []; staffLookup = {};
+                for (const r of allRows) {
+                    const sid = r[idx.staffId];
                     if (!sid || sid === 'Staff ID' || sid.trim() === '') continue;
-                    const entry = { staffId: sid.trim(), name: row[idx.name]||'', nationality: row[idx.nationality]||'', status: row[idx.status]||'', start: row[idx.start]||'', campus: row[idx.campus]||'', position: row[idx.position]||'', department: row[idx.department]||'', lastDay: row[idx.lastDay]||'' };
+                    const entry = { staffId: sid.trim(), name: r[idx.name]||'', nationality: r[idx.nationality]||'', status: normalizeStatus(r[idx.status]||''), start: r[idx.start]||'', campus: r[idx.campus]||'', position: r[idx.position]||'', department: r[idx.department]||'', lastDay: r[idx.lastDay]||'' };
                     staffMasterData.push(entry);
                     staffLookup[entry.staffId] = entry;
                 }
             } catch (e) { console.error('Failed to fetch Master List:', e); }
+        }
+
+        function parseDateDMY(str) {
+            if (!str) return null;
+            const parts = str.trim().split(/[\-\/\.\s]+/);
+            if (parts.length < 3) return null;
+            const months = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+            const d = parseInt(parts[0]), m = months[parts[1].toLowerCase().slice(0,3)], y = parseInt(parts[2]);
+            if (!isNaN(d) && m !== undefined && !isNaN(y)) return new Date(y, m, d);
+            return null;
         }
 
         function autoFillResignation(staffId) {
@@ -909,26 +934,22 @@
             if (!entry) return;
             document.getElementById('res-name').value = entry.name;
             document.getElementById('res-nationality').value = entry.nationality;
-            document.getElementById('res-campus').value = entry.campus;
-            document.getElementById('res-department').value = entry.department;
+            if (entry.campus) document.getElementById('res-campus').value = entry.campus;
+            if (entry.department) document.getElementById('res-department').value = entry.department;
             document.getElementById('res-position').value = entry.position;
-            document.getElementById('res-status').value = entry.status;
-            if (entry.start) {
-                const d = new Date(entry.start);
-                if (!isNaN(d)) document.getElementById('res-start').value = d.toISOString().split('T')[0];
-            }
-            if (entry.lastDay) {
-                const d = new Date(entry.lastDay);
-                if (!isNaN(d)) document.getElementById('res-end').value = d.toISOString().split('T')[0];
-            }
+            if (entry.status) document.getElementById('res-status').value = entry.status;
+            const sd = parseDateDMY(entry.start);
+            if (sd) document.getElementById('res-start').value = sd.toISOString().split('T')[0];
+            const ld = parseDateDMY(entry.lastDay);
+            if (ld) document.getElementById('res-end').value = ld.toISOString().split('T')[0];
         }
 
         function autoFillDonation(staffId) {
             const entry = staffLookup[staffId];
             if (!entry) return;
             document.getElementById('don-name').value = entry.name;
-            document.getElementById('don-campus').value = entry.campus;
-            document.getElementById('don-status').value = entry.status;
+            if (entry.campus) document.getElementById('don-campus').value = entry.campus;
+            if (entry.status) document.getElementById('don-status').value = entry.status;
         }
 
         function initFirestore() {
